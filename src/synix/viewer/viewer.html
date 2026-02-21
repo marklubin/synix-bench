@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stack Trace Viewer</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f5f6f8; --bg3: #e4e6eb;
+    --fg: #1a1a2e; --fg2: #3a3a52; --fg3: #8a8aa0;
+    --green: #2e8b57; --red: #d03050; --blue: #2563eb;
+    --yellow: #b8860b; --purple: #7c3aed; --cyan: #0891b2;
+    --orange: #d97706;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+    background: var(--bg); color: var(--fg); font-size: 15px;
+    height: 100vh; overflow: hidden;
+  }
+
+  /* ── Drop zone ─────────────────────────── */
+  #drop-zone {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 0; min-height: 100vh; gap: 20px;
+    overflow-y: auto; max-height: 100vh;
+  }
+  #drop-zone .icon { font-size: 64px; opacity: 0.3; }
+  #drop-zone .label { color: var(--fg2); font-size: 18px; }
+  #drop-zone .sub { color: var(--fg3); font-size: 14px; }
+  #drop-zone.dragover { background: var(--bg2); }
+  #file-input { display: none; }
+  #drop-zone button {
+    background: var(--bg3); color: var(--fg); border: 1px solid var(--fg3);
+    padding: 10px 28px; border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 15px;
+  }
+  #drop-zone button:hover { background: var(--blue); color: #fff; }
+
+  /* ── App ───────────────────────────────── */
+  #app { display: none; height: 100vh; flex-direction: column; }
+  #app.active { display: flex; }
+
+  /* ── Header ────────────────────────────── */
+  #header {
+    background: var(--bg2); padding: 14px 24px; border-bottom: 1px solid var(--bg3);
+    display: flex; align-items: center; gap: 28px; flex-shrink: 0;
+  }
+  #header h1 { font-size: 16px; font-weight: 700; color: var(--blue); }
+  .stat { display: flex; align-items: baseline; gap: 6px; }
+  .stat .val { font-size: 17px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--fg3); text-transform: uppercase; letter-spacing: 0.5px; }
+  #load-btn {
+    margin-left: auto; background: var(--bg); color: var(--fg3); border: 1px solid var(--bg3);
+    padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px;
+  }
+  #load-btn:hover { background: var(--bg3); color: var(--fg2); }
+
+  /* ── Chart ─────────────────────────────── */
+  #chart-area {
+    background: var(--bg); padding: 10px 24px 8px; border-bottom: 1px solid var(--bg3);
+    flex-shrink: 0; height: 80px;
+  }
+  #chart-bars { display: flex; align-items: flex-end; height: 64px; gap: 1px; }
+  .cbar {
+    flex: 1; min-width: 2px; max-width: 20px; border-radius: 2px 2px 0 0;
+    cursor: pointer; transition: opacity 0.15s; opacity: 0.7;
+  }
+  .cbar:hover { opacity: 1; }
+  .cbar.sel { opacity: 1; outline: 2px solid var(--fg3); outline-offset: -1px; }
+  .cbar.d0 { background: var(--blue); }
+  .cbar.d1 { background: var(--green); }
+  .cbar.d2 { background: var(--yellow); }
+  .cbar.d3 { background: var(--purple); }
+  .cbar.d4 { background: var(--orange); }
+
+  /* ── Main ──────────────────────────────── */
+  #main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Timeline ──────────────────────────── */
+  #timeline {
+    width: 360px; min-width: 280px; max-width: 480px;
+    border-right: 1px solid var(--bg3); overflow-y: auto; flex-shrink: 0;
+  }
+  .frame-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; cursor: pointer;
+    border-bottom: 1px solid var(--bg3); background: var(--bg2);
+  }
+  .frame-head:hover { background: var(--bg3); }
+  .frame-head.sel { background: var(--bg3); border-left: 3px solid var(--green); }
+  .frame-head .arrow { color: var(--green); font-size: 14px; flex-shrink: 0; width: 18px; }
+  .frame-head .slug { font-size: 15px; font-weight: 700; color: var(--green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .frame-head .fmeta { margin-left: auto; font-size: 12px; color: var(--fg3); white-space: nowrap; }
+
+  .frame-pop {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 16px; cursor: pointer;
+    border-bottom: 1px solid var(--bg3); background: var(--bg2);
+  }
+  .frame-pop:hover { background: var(--bg3); }
+  .frame-pop.sel { background: var(--bg3); border-left: 3px solid var(--red); }
+  .frame-pop .arrow { color: var(--red); font-size: 14px; flex-shrink: 0; width: 18px; }
+  .frame-pop .slug { font-size: 14px; color: var(--red); }
+  .frame-pop .fmeta { margin-left: auto; font-size: 12px; color: var(--fg3); }
+
+  .srow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 16px; cursor: pointer;
+    border-bottom: 1px solid var(--bg3);
+  }
+  .srow:hover { background: var(--bg2); }
+  .srow.sel { background: var(--bg3); border-left: 3px solid var(--blue); }
+  .srow .snum { color: var(--fg3); font-size: 13px; width: 24px; text-align: right; flex-shrink: 0; }
+  .srow .tool-name { color: var(--cyan); font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srow .tool-name.text-only { color: var(--fg3); font-style: italic; }
+  .srow .stok { color: var(--fg3); font-size: 12px; flex-shrink: 0; }
+
+  /* ── Detail ────────────────────────────── */
+  #detail { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  #detail-empty { color: var(--fg3); padding: 60px; text-align: center; font-size: 16px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--bg3); }
+  .tab {
+    padding: 8px 20px; cursor: pointer; font-size: 13px; font-weight: 600;
+    color: var(--fg3); border-bottom: 2px solid transparent; margin-bottom: -2px;
+  }
+  .tab:hover { color: var(--fg2); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Step header bar ───────────────────── */
+  .step-bar {
+    display: flex; align-items: center; gap: 16px; padding: 10px 14px;
+    background: var(--bg2); border-radius: 6px; margin-bottom: 16px; font-size: 13px;
+  }
+  .step-bar .sb-frame { color: var(--green); font-weight: 700; }
+  .step-bar .sb-dim { color: var(--fg3); }
+
+  /* ── Context messages ──────────────────── */
+  .ctx-divider {
+    padding: 6px 0; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--green); font-weight: 700;
+    border-top: 1px dashed var(--green); margin: 12px 0 6px;
+  }
+  .ctx-divider.reset { color: var(--yellow); border-top-color: var(--yellow); }
+
+  .ctx-msg {
+    padding: 8px 12px; margin-bottom: 3px; border-radius: 4px;
+    border-left: 3px solid var(--bg3); cursor: pointer;
+  }
+  .ctx-msg.old { opacity: 0.4; }
+  .ctx-msg.new { border-left-color: var(--green); background: rgba(46,139,87,0.05); }
+  .ctx-msg:hover { opacity: 1; background: var(--bg2); }
+  .ctx-role {
+    font-size: 11px; text-transform: uppercase; font-weight: 700;
+    margin-bottom: 3px; display: flex; align-items: center; gap: 8px;
+  }
+  .ctx-role.r-system { color: var(--purple); }
+  .ctx-role.r-user { color: var(--blue); }
+  .ctx-role.r-assistant { color: var(--yellow); }
+  .ctx-role.r-tool { color: var(--cyan); }
+  .ctx-len { font-size: 10px; color: var(--fg3); font-weight: 400; }
+  .ctx-tools-inline { font-size: 12px; color: var(--orange); font-weight: 400; }
+  .ctx-body {
+    font-size: 13px; color: var(--fg2); line-height: 1.5;
+    max-height: 2.5em; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+  }
+  .ctx-body.expanded { max-height: none; }
+
+  /* ── Response section ──────────────────── */
+  .resp-divider {
+    padding: 8px 0; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--fg3); font-weight: 700;
+    border-top: 2px solid var(--bg3); margin: 16px 0 10px;
+  }
+
+  /* Function call style for push */
+  .call-block {
+    background: var(--bg2); border-radius: 6px; padding: 16px;
+    border-left: 4px solid var(--green); margin-bottom: 8px;
+  }
+  .call-sig {
+    font-size: 15px; color: var(--green); font-weight: 700; margin-bottom: 10px;
+  }
+  .call-sig .fn-name { color: var(--green); }
+  .call-params { margin-left: 20px; }
+  .call-param {
+    display: flex; gap: 8px; margin-bottom: 6px; font-size: 13px;
+  }
+  .call-param .pname { color: var(--fg3); min-width: 80px; flex-shrink: 0; }
+  .call-param .pval { color: var(--fg2); }
+  .call-param pre {
+    background: var(--bg); padding: 10px 12px; border-radius: 4px;
+    font-size: 12px; color: var(--fg2); line-height: 1.5;
+    max-height: 80px; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+    cursor: pointer; margin: 4px 0 0; flex: 1;
+  }
+  .call-param pre.expanded { max-height: none; }
+  .call-param pre:hover { background: var(--bg3); }
+
+  /* Return style for pop */
+  .ret-block {
+    background: var(--bg2); border-radius: 6px; padding: 16px;
+    border-left: 4px solid var(--red);
+  }
+  .ret-sig { font-size: 15px; color: var(--red); font-weight: 700; margin-bottom: 10px; }
+  .ret-val {
+    background: var(--bg); padding: 10px 12px; border-radius: 4px;
+    font-size: 13px; color: var(--fg2); line-height: 1.5;
+    max-height: 120px; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+    cursor: pointer;
+  }
+  .ret-val.expanded { max-height: none; }
+  .ret-val:hover { background: var(--bg3); }
+
+  /* Regular tool response */
+  .tool-resp {
+    padding: 8px 12px; margin-bottom: 4px; border-radius: 4px;
+    border-left: 3px solid var(--cyan); background: rgba(8,145,178,0.04);
+  }
+  .tool-resp .tr-name { font-size: 13px; color: var(--cyan); font-weight: 600; }
+  .tool-resp .tr-args { font-size: 12px; color: var(--fg3); margin-left: 4px; }
+  .tool-resp .tr-result {
+    font-size: 12px; color: var(--fg2); margin-top: 4px;
+    max-height: 2.5em; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+    cursor: pointer;
+  }
+  .tool-resp .tr-result.expanded { max-height: none; }
+
+  /* ── Info tab ──────────────────────────── */
+  .dsec { margin-bottom: 20px; }
+  .dsec h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--fg3); margin-bottom: 8px;
+    border-bottom: 1px solid var(--bg3); padding-bottom: 5px;
+  }
+  .dkv { display: grid; grid-template-columns: 120px 1fr; gap: 5px 16px; font-size: 14px; }
+  .dkv .k { color: var(--fg3); }
+  .dkv .v { color: var(--fg); word-break: break-word; }
+
+  .stack-viz { display: flex; flex-direction: column-reverse; gap: 3px; }
+  .sf {
+    padding: 8px 14px; border-radius: 6px; border-left: 4px solid;
+    font-size: 14px; display: flex; align-items: center; gap: 10px;
+  }
+  .sf .sf-name { font-weight: 700; }
+  .sf .sf-meta { color: var(--fg3); font-size: 12px; margin-left: auto; }
+  .sf.cur { background: var(--bg3); }
+  .sf.par { background: var(--bg2); color: var(--fg2); }
+  .sf.d0 { border-color: var(--blue); }
+  .sf.d1 { border-color: var(--green); }
+  .sf.d2 { border-color: var(--yellow); }
+  .sf.d3 { border-color: var(--purple); }
+
+  .content-block {
+    background: var(--bg2); padding: 14px 16px; border-radius: 6px;
+    white-space: pre-wrap; word-break: break-word; font-size: 14px;
+    color: var(--fg2); max-height: 200px; overflow-y: auto; line-height: 1.5;
+  }
+
+  /* ── Heap styles ────────────────────────── */
+  .heap-msg {
+    border-left-color: var(--purple) !important;
+    background: rgba(124,58,237,0.05) !important;
+  }
+  .heap-msg .ctx-role { color: var(--purple) !important; }
+  .heap-label {
+    display: inline-block; background: var(--purple); color: #fff;
+    font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px;
+    margin-left: 6px; letter-spacing: 0.5px;
+  }
+
+  /* Heap events in timeline */
+  .heap-tag {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px; margin-left: 4px;
+    vertical-align: middle;
+  }
+  .heap-tag.alloc { background: rgba(46,139,87,0.12); color: var(--green); }
+  .heap-tag.write { background: rgba(184,134,11,0.12); color: var(--yellow); }
+  .heap-tag.free { background: rgba(208,48,80,0.12); color: var(--red); }
+
+  /* Heap tab */
+  .heap-timeline-container {
+    background: var(--bg2); border-radius: 6px; padding: 16px;
+    margin-bottom: 20px; overflow-x: auto;
+  }
+  .heap-timeline-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px;
+  }
+  .heap-timeline-label {
+    width: 140px; flex-shrink: 0; color: var(--fg2); font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .heap-timeline-bar-area {
+    flex: 1; height: 22px; position: relative; background: var(--bg); border-radius: 3px;
+  }
+  .heap-bar {
+    position: absolute; top: 2px; height: 18px; border-radius: 3px;
+    min-width: 4px; cursor: pointer; transition: opacity 0.15s;
+  }
+  .heap-bar:hover { opacity: 0.8; }
+  .heap-bar.active { background: var(--green); }
+  .heap-bar.freed { background: var(--fg3); opacity: 0.5; }
+  .heap-bar .write-tick {
+    position: absolute; top: 0; width: 2px; height: 100%;
+    background: var(--yellow); border-radius: 1px;
+  }
+
+  .heap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .heap-table th {
+    text-align: left; padding: 6px 10px; color: var(--fg3);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--bg3);
+  }
+  .heap-table td { padding: 6px 10px; border-bottom: 1px solid var(--bg3); }
+  .heap-table .hn { color: var(--purple); font-weight: 600; }
+  .heap-table .hd { color: var(--fg2); }
+  .heap-table .hs { color: var(--fg3); text-align: right; }
+
+  /* ── Register styles ─────────────────── */
+  .reg-tag {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px; margin-left: 4px;
+    vertical-align: middle;
+    background: rgba(8,145,178,0.1); color: var(--cyan);
+  }
+  .reg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .reg-table th {
+    text-align: left; padding: 6px 10px; color: var(--fg3);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--bg3);
+  }
+  .reg-table td { padding: 6px 10px; border-bottom: 1px solid var(--bg3); vertical-align: top; }
+  .reg-key { color: var(--cyan); font-weight: 600; white-space: nowrap; }
+  .reg-label { color: var(--fg3); font-size: 11px; }
+  .reg-val { color: var(--fg2); white-space: pre-wrap; word-break: break-word; max-width: 500px; }
+  .reg-val.empty { color: var(--fg3); font-style: italic; }
+  .reg-changed { background: rgba(8,145,178,0.06); }
+  .reg-changed .reg-key { color: var(--blue); }
+  .reg-chars { color: var(--fg3); font-size: 11px; text-align: right; }
+
+  .reg-msg {
+    border-left-color: var(--cyan) !important;
+    background: rgba(8,145,178,0.04) !important;
+  }
+  .reg-msg .ctx-role { color: var(--cyan) !important; }
+  .reg-label-badge {
+    display: inline-block; background: var(--cyan); color: #fff;
+    font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px;
+    margin-left: 6px; letter-spacing: 0.5px;
+  }
+
+  /* ── Probe styles ────────────────────── */
+  .probe-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 16px; cursor: pointer;
+    border-bottom: 1px solid var(--bg3);
+    background: rgba(217,119,6,0.04);
+  }
+  .probe-row:hover { background: rgba(217,119,6,0.08); }
+  .probe-row.sel { background: rgba(217,119,6,0.12); border-left: 3px solid var(--orange); }
+  .probe-icon { color: var(--orange); font-size: 14px; flex-shrink: 0; width: 24px; text-align: right; }
+  .probe-q { color: var(--orange); font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .probe-meta { color: var(--fg3); font-size: 12px; flex-shrink: 0; }
+
+  .probe-detail {
+    background: var(--bg2); border-radius: 6px; padding: 16px;
+    border-left: 4px solid var(--orange); margin-bottom: 12px;
+  }
+  .probe-detail-q { color: var(--orange); font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+  .probe-detail-a {
+    color: var(--fg2); font-size: 13px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
+</style>
+</head>
+<body>
+
+<div id="drop-zone">
+  <div class="icon">&#9776;</div>
+  <div class="label">Drop a trace.json file here</div>
+  <div class="sub">or</div>
+  <button onclick="document.getElementById('file-input').click()">Choose File</button>
+  <input type="file" id="file-input" accept=".json">
+  <div id="trace-index" style="display:none; width: 80%; max-width: 900px; margin-top: 24px;"></div>
+</div>
+
+<div id="app">
+  <div id="header">
+    <h1>Stack Trace</h1>
+    <div class="stat"><span class="val" id="s-steps">-</span><span class="lbl">steps</span></div>
+    <div class="stat"><span class="val" id="s-dynamic">-</span><span class="lbl">dynamic tok</span></div>
+    <div class="stat"><span class="val" id="s-in" style="color:var(--fg3)">-</span><span class="lbl">total in</span></div>
+    <div class="stat"><span class="val" id="s-depth">-</span><span class="lbl">depth</span></div>
+    <div class="stat"><span class="val" id="s-time">-</span><span class="lbl">time</span></div>
+    <div class="stat" id="s-heap-wrap" style="display:none"><span class="val" id="s-heap">-</span><span class="lbl">peak heap</span></div>
+    <div class="stat" id="s-reg-wrap" style="display:none"><span class="val" id="s-reg">-</span><span class="lbl">peak regs</span></div>
+    <div class="stat" id="s-probe-wrap" style="display:none"><span class="val" id="s-probe">-</span><span class="lbl">probes</span></div>
+    <div class="stat" id="s-search-wrap" style="display:none"><span class="val" id="s-search">-</span><span class="lbl">searches</span></div>
+    <div class="stat" id="s-noise-wrap" style="display:none"><span class="val" id="s-noise">-</span><span class="lbl">noise%</span></div>
+    <button id="load-btn" onclick="document.getElementById('file-input').click()">Load</button>
+  </div>
+  <div id="chart-area"><div id="chart-bars"></div></div>
+  <div id="main">
+    <div id="timeline"></div>
+    <div id="detail"><div id="detail-empty">Select a step to inspect</div></div>
+  </div>
+</div>
+
+<script>
+const DC = ['d0','d1','d2','d3','d4'];
+let DATA = null, SEL = null, TAB = 'context', HAS_HEAP = false, HAS_REGS = false, HAS_PROBES = false, HAS_SEARCH = false;
+
+const dz = document.getElementById('drop-zone');
+const fi = document.getElementById('file-input');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); });
+fi.addEventListener('change', e => { if (e.target.files.length) loadFile(e.target.files[0]); });
+function loadFile(file) {
+  const r = new FileReader();
+  r.onload = e => { try { DATA = JSON.parse(e.target.result); render(); } catch(err) { alert('Bad JSON: '+err.message); } };
+  r.readAsText(file);
+}
+
+function render() {
+  dz.style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  const m = DATA.meta;
+  document.getElementById('s-steps').textContent = m.total_steps;
+  // dynamic_tokens = sum of task_context_tokens (input minus instruction overhead per step)
+  const dynTok = m.dynamic_tokens != null ? m.dynamic_tokens : m.input_tokens;
+  document.getElementById('s-dynamic').textContent = fmtN(dynTok);
+  document.getElementById('s-in').textContent = fmtN(m.input_tokens);
+  document.getElementById('s-depth').textContent = m.max_depth;
+  document.getElementById('s-time').textContent = m.elapsed_s + 's';
+  // Show run name in header if present
+  if (m.name) document.querySelector('#header h1').textContent = m.name;
+  else document.querySelector('#header h1').textContent = 'Stack Trace';
+
+  // Detect heap usage
+  HAS_HEAP = DATA.steps.some(s => (s.heap && Object.keys(s.heap).length > 0) || (s.heap_events && s.heap_events.length > 0));
+  if (HAS_HEAP) {
+    const peakChars = Math.max(...DATA.steps.map(s => s.heap_total_chars || 0));
+    document.getElementById('s-heap').textContent = fmtN(peakChars) + 'c';
+    document.getElementById('s-heap-wrap').style.display = '';
+  } else {
+    document.getElementById('s-heap-wrap').style.display = 'none';
+  }
+
+  // Detect register usage
+  HAS_REGS = DATA.steps.some(s => s.registers && Object.values(s.registers).some(v => v));
+  if (HAS_REGS) {
+    const peakBytes = DATA.meta.peak_reg_bytes || Math.max(...DATA.steps.map(s => s.reg_bytes_total || 0));
+    document.getElementById('s-reg').textContent = peakBytes + 'c';
+    document.getElementById('s-reg-wrap').style.display = '';
+  } else {
+    document.getElementById('s-reg-wrap').style.display = 'none';
+  }
+
+  // Detect probes
+  HAS_PROBES = DATA.probes && DATA.probes.length > 0;
+  if (HAS_PROBES) {
+    document.getElementById('s-probe').textContent = DATA.probes.length;
+    document.getElementById('s-probe-wrap').style.display = '';
+  } else {
+    document.getElementById('s-probe-wrap').style.display = 'none';
+  }
+
+  // Detect search stats
+  HAS_SEARCH = m.search_stats != null;
+  if (HAS_SEARCH) {
+    const ss = m.search_stats;
+    document.getElementById('s-search').textContent = ss.calls;
+    document.getElementById('s-search-wrap').style.display = '';
+    document.getElementById('s-noise').textContent = Math.round(ss.noise_ratio * 100);
+    document.getElementById('s-noise-wrap').style.display = '';
+  } else {
+    document.getElementById('s-search-wrap').style.display = 'none';
+    document.getElementById('s-noise-wrap').style.display = 'none';
+  }
+
+  renderChart(DATA.steps);
+  renderTimeline(DATA.steps);
+  document.getElementById('detail').innerHTML = '<div id="detail-empty">Select a step to inspect</div>';
+  SEL = null;
+}
+
+// task_context_tokens = input_tokens minus fixed instruction overhead (permgen)
+// Falls back to managed_tokens (input - cached), then input_tokens for old traces
+function taskCtxOf(s) { return s.task_context_tokens != null ? s.task_context_tokens : (s.managed_tokens != null ? s.managed_tokens : s.input_tokens); }
+// managed_tokens = input_tokens minus OpenAI cached prefix
+function managedOf(s) { return s.managed_tokens != null ? s.managed_tokens : s.input_tokens; }
+
+function renderChart(steps) {
+  const c = document.getElementById('chart-bars'); c.innerHTML = '';
+  const mx = Math.max(...steps.map(s => taskCtxOf(s)), 1);
+  steps.forEach((s, i) => {
+    const b = document.createElement('div');
+    b.className = `cbar ${DC[s.depth]||'d0'}`;
+    const tc = taskCtxOf(s);
+    b.style.height = Math.max(3, (tc/mx)*58)+'px';
+    b.title = `Step ${s.step}: ${fmtN(tc)} task ctx (d=${s.depth})`;
+    b.addEventListener('click', () => sel(i));
+    c.appendChild(b);
+  });
+}
+
+function heapTagsHtml(step) {
+  const evts = step.heap_events || [];
+  if (!evts.length) return '';
+  return evts.map(e => {
+    const cls = e.type === 'alloc' ? 'alloc' : e.type === 'write' ? 'write' : 'free';
+    const sym = e.type === 'alloc' ? '+' : e.type === 'write' ? '~' : '-';
+    return `<span class="heap-tag ${cls}" title="${e.type} ${esc(e.name)}">${sym}${esc(trunc(e.name,8))}</span>`;
+  }).join('');
+}
+
+function regTagsHtml(step) {
+  const evts = step.reg_events || [];
+  if (!evts.length) return '';
+  return `<span class="reg-tag" title="${evts.map(e=>e.register+' '+e.label).join(', ')}">R:${evts.length}</span>`;
+}
+
+function renderTimeline(steps) {
+  const tl = document.getElementById('timeline'); tl.innerHTML = '';
+  steps.forEach((s, i) => {
+    const ev = s.event, indent = s.depth * 16;
+    const htags = heapTagsHtml(s);
+    if (ev?.type === 'push') {
+      const el = mk('div', 'frame-head', tl);
+      el.dataset.idx = i; el.style.paddingLeft = (16+indent)+'px';
+      el.innerHTML = `<span class="arrow">&#9654;</span><span class="slug">${esc(ev.name||trunc(ev.objective,30))}</span>${htags}<span class="fmeta">${fmtMs(s.api_time_ms)} &middot; ${fmtN(taskCtxOf(s))}</span>`;
+      el.onclick = () => sel(i);
+    } else if (ev?.type === 'pop') {
+      const el = mk('div', 'frame-pop', tl);
+      el.dataset.idx = i; el.style.paddingLeft = (16+indent)+'px';
+      el.innerHTML = `<span class="arrow">&#9664;</span><span class="slug">return</span>${htags}<span class="fmeta">${fmtMs(s.api_time_ms)} &middot; ${fmtN(taskCtxOf(s))}</span>`;
+      el.onclick = () => sel(i);
+    } else {
+      const el = mk('div', 'srow', tl);
+      el.dataset.idx = i; el.style.paddingLeft = (16+indent)+'px';
+      const tn = (s.tools||[]).map(t=>t.name).filter(n=>n!=='push_frame'&&n!=='pop_frame'&&n!=='heap_alloc'&&n!=='heap_write'&&n!=='heap_free');
+      const label = tn.join(', ')||'text';
+      el.innerHTML = `<span class="snum">${s.step}</span><span class="tool-name${tn.length?'':' text-only'}">${esc(label)}</span>${htags}<span class="stok">${fmtMs(s.api_time_ms)} &middot; ${fmtN(taskCtxOf(s))}</span>`;
+      el.onclick = () => sel(i);
+    }
+    // Probe rows after this step
+    if (HAS_PROBES) {
+      DATA.probes.filter(p => p.after_step === s.step).forEach(p => {
+        const pel = mk('div', 'probe-row', tl);
+        pel.style.paddingLeft = (16 + indent) + 'px';
+        pel.innerHTML = `<span class="probe-icon">&#128270;</span>
+          <span class="probe-q">${esc(trunc(p.question, 50))}</span>
+          <span class="probe-meta">${esc(p.trigger)}</span>`;
+        pel.onclick = () => { sel(i); TAB = 'probes'; renderDetail(DATA.steps[i], i); };
+      });
+    }
+  });
+}
+
+function sel(idx) {
+  SEL = idx;
+  document.querySelectorAll('.srow,.frame-head,.frame-pop,.probe-row').forEach(e => e.classList.remove('sel'));
+  const el = document.querySelector(`[data-idx="${idx}"]`);
+  if (el) { el.classList.add('sel'); el.scrollIntoView({block:'nearest'}); }
+  document.querySelectorAll('.cbar').forEach((b,i) => b.classList.toggle('sel', i===idx));
+  renderDetail(DATA.steps[idx], idx);
+}
+
+function renderDetail(s, idx) {
+  const p = document.getElementById('detail');
+  const fname = s.stack?.[s.stack.length-1]?.name || 'main';
+
+  // Step bar
+  const apiMs = s.api_time_ms != null ? `${fmtMs(s.api_time_ms)} api` : '';
+  const toolMs = s.tool_time_ms != null && s.tool_time_ms > 0 ? `${fmtMs(s.tool_time_ms)} tools` : '';
+  const wallS = s.wall_clock_s != null ? `@ ${s.wall_clock_s}s` : '';
+  let h = `<div class="step-bar">
+    <span class="sb-frame">${esc(fname)}</span>
+    <span class="sb-dim">step ${s.step}</span>
+    <span class="sb-dim">d=${s.depth}</span>
+    <span class="sb-dim">${fmtN(taskCtxOf(s))} task ctx</span>
+    <span class="sb-dim">${apiMs}</span>
+    ${toolMs ? `<span class="sb-dim">${toolMs}</span>` : ''}
+    <span class="sb-dim" style="margin-left:auto">${wallS}</span>
+  </div>`;
+
+  // Tabs
+  h += `<div class="tabs">
+    <div class="tab ${TAB==='context'?'active':''}" data-tab="context">Context</div>
+    <div class="tab ${TAB==='info'?'active':''}" data-tab="info">Stack + Info</div>
+    ${HAS_REGS ? `<div class="tab ${TAB==='regs'?'active':''}" data-tab="regs">Registers</div>` : ''}
+    ${HAS_HEAP ? `<div class="tab ${TAB==='heap'?'active':''}" data-tab="heap">Heap</div>` : ''}
+    ${HAS_PROBES ? `<div class="tab ${TAB==='probes'?'active':''}" data-tab="probes">Probes</div>` : ''}
+    ${HAS_SEARCH ? `<div class="tab ${TAB==='search'?'active':''}" data-tab="search">Search</div>` : ''}
+  </div>`;
+
+  // ── Context tab ──
+  h += `<div class="tab-panel ${TAB==='context'?'active':''}" id="tp-ctx">`;
+  h += renderContext(s, idx);
+  h += '</div>';
+
+  // ── Info tab ──
+  h += `<div class="tab-panel ${TAB==='info'?'active':''}" id="tp-info">`;
+  if (s.stack?.length) {
+    h += `<div class="dsec"><h3>Call Stack</h3><div class="stack-viz">`;
+    s.stack.forEach((f, fi) => {
+      const cur = fi === s.stack.length-1;
+      h += `<div class="sf ${cur?'cur':'par'} ${DC[f.depth]||'d0'}">
+        <span class="sf-name">${esc(f.name||'?')}</span>
+        <span style="color:var(--fg3)">${esc(trunc(f.objective,50))}</span>
+        <span class="sf-meta">${f.frame_steps} steps</span></div>`;
+    });
+    h += '</div></div>';
+  }
+  h += `<div class="dsec"><h3>Metrics</h3><div class="dkv">
+    <span class="k">Frame</span><span class="v" style="color:var(--green);font-weight:700">${esc(fname)}</span>
+    <span class="k">Depth</span><span class="v">${s.depth}</span>
+    <span class="k">Frame step</span><span class="v">${s.frame_steps}</span>
+    <span class="k">Task context</span><span class="v" style="font-weight:700;color:var(--blue)">${fmtN(taskCtxOf(s))}</span>
+    <span class="k">Cached (prefix)</span><span class="v" style="color:var(--fg3)">${s.cached_tokens != null ? fmtN(s.cached_tokens) : '-'}</span>
+    <span class="k">Total input</span><span class="v" style="color:var(--fg3)">${fmtN(s.input_tokens)}</span>
+    <span class="k">Output tokens</span><span class="v">${fmtN(s.output_tokens)}</span>
+    <span class="k">Cumul. managed</span><span class="v">${s.cumulative_managed != null ? fmtN(s.cumulative_managed) : fmtN(s.cumulative_input)}</span>
+    <span class="k">Frame msgs</span><span class="v">${s.frame_messages}</span>
+    <span class="k">API time</span><span class="v">${fmtMs(s.api_time_ms)}</span>
+    <span class="k">Tool time</span><span class="v">${fmtMs(s.tool_time_ms)}</span>
+    <span class="k">Step time</span><span class="v">${fmtMs(s.step_time_ms)}</span>
+    <span class="k">Wall clock</span><span class="v">${s.wall_clock_s != null ? s.wall_clock_s + 's' : '-'}</span>
+  </div></div>`;
+  if (s.content) h += `<div class="dsec"><h3>Assistant Text</h3><div class="content-block">${esc(s.content)}</div></div>`;
+  h += '</div>';
+
+  // ── Registers tab ──
+  if (HAS_REGS) {
+    h += `<div class="tab-panel ${TAB==='regs'?'active':''}" id="tp-regs">`;
+    h += renderRegsTab(s, idx);
+    h += '</div>';
+  }
+
+  // ── Heap tab ──
+  if (HAS_HEAP) {
+    h += `<div class="tab-panel ${TAB==='heap'?'active':''}" id="tp-heap">`;
+    h += renderHeapTab(s, idx);
+    h += '</div>';
+  }
+
+  // ── Probes tab ──
+  if (HAS_PROBES) {
+    h += `<div class="tab-panel ${TAB==='probes'?'active':''}" id="tp-probes">`;
+    const stepProbes = DATA.probes.filter(p => p.after_step === s.step);
+    if (stepProbes.length > 0) {
+      stepProbes.forEach(p => {
+        h += `<div class="probe-detail">
+          <div class="probe-detail-q">&#128270; ${esc(p.question)}</div>
+          <div class="probe-detail-a">${esc(p.answer)}</div>
+        </div>`;
+      });
+    } else {
+      h += '<div style="color:var(--fg3);padding:20px">No probes fired at this step</div>';
+    }
+    // Show all probes summary
+    h += `<div class="dsec" style="margin-top:20px"><h3>All Probes (${DATA.probes.length})</h3>`;
+    DATA.probes.forEach(p => {
+      const isCur = p.after_step === s.step;
+      h += `<div class="probe-detail" style="opacity:${isCur?1:0.6};margin-bottom:8px">
+        <div class="probe-detail-q" style="font-size:12px">step ${p.after_step} &middot; ${esc(p.trigger)} &middot; &#128270; ${esc(trunc(p.question, 80))}</div>
+        <div class="probe-detail-a" style="font-size:12px">${esc(trunc(p.answer, 300))}</div>
+      </div>`;
+    });
+    h += '</div>';
+    h += '</div>';
+  }
+
+  // ── Search tab ──
+  if (HAS_SEARCH) {
+    h += `<div class="tab-panel ${TAB==='search'?'active':''}" id="tp-search">`;
+    h += renderSearchTab(s, idx);
+    h += '</div>';
+  }
+
+  p.innerHTML = h;
+
+  // Tab handlers
+  p.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => { TAB = t.dataset.tab; renderDetail(s, idx); }));
+  // Expand handlers
+  p.querySelectorAll('.ctx-msg').forEach(m => m.addEventListener('click', () => { const b = m.querySelector('.ctx-body'); if(b) b.classList.toggle('expanded'); }));
+  p.querySelectorAll('.call-param pre, .ret-val, .tr-result').forEach(el => el.addEventListener('click', e => { e.stopPropagation(); el.classList.toggle('expanded'); }));
+}
+
+// ── Merged context + response view ───────────────────
+function renderContext(s, idx) {
+  const ctx = s.context;
+  if (!ctx?.length) return '<div style="color:var(--fg3);padding:20px">No context snapshot</div>';
+
+  // Diff: find where new messages start
+  let newAt = 0, isReset = false;
+  if (idx > 0) {
+    const prev = DATA.steps[idx-1];
+    if (prev.event?.type === 'push' || prev.event?.type === 'pop') {
+      isReset = true; newAt = 0;
+    } else if (prev.context?.length) {
+      newAt = prev.context.length;
+    }
+  }
+
+  let h = '';
+
+  // Messages the model saw
+  if (isReset) h += '<div class="ctx-divider reset">context reset &mdash; new frame</div>';
+
+  ctx.forEach((msg, mi) => {
+    const isNew = mi >= newAt;
+    if (!isReset && mi === newAt && newAt > 0) {
+      h += '<div class="ctx-divider">new since last step</div>';
+    }
+    h += renderCtxMsg(msg, isNew);
+  });
+
+  // ── Model response this step ──
+  h += '<div class="resp-divider">model responded</div>';
+
+  const ev = s.event;
+  const regularTools = (s.tools||[]).filter(t => t.name !== 'push_frame' && t.name !== 'pop_frame');
+
+  // Regular tool calls
+  regularTools.forEach(t => {
+    const argStr = fmtToolArgs(t);
+    h += `<div class="tool-resp">
+      <span class="tr-name">${esc(t.name)}</span><span class="tr-args">${esc(argStr)}</span>
+      <div class="tr-result">${esc(t.result)}</div>
+    </div>`;
+  });
+
+  // Push = function call
+  if (ev?.type === 'push') {
+    const name = ev.name || 'unnamed';
+    h += `<div class="call-block">
+      <div class="call-sig"><span class="fn-name">${esc(name)}</span>(</div>
+      <div class="call-params">
+        <div class="call-param"><span class="pname">objective</span><span class="pval">${esc(trunc(ev.objective, 120))}</span></div>
+        <div class="call-param"><span class="pname">context</span><pre>${esc(ev.context)}</pre></div>
+        <div class="call-param"><span class="pname">returns</span><span class="pval">${esc(ev.return_spec)}</span></div>
+      </div>
+      <div class="call-sig">)</div>
+    </div>`;
+  }
+
+  // Pop = return statement
+  if (ev?.type === 'pop') {
+    // Find the current frame name from stack
+    const frameName = s.stack?.[s.stack.length-1]?.name || '?';
+    h += `<div class="ret-block">
+      <div class="ret-sig">return <span style="color:var(--fg3)">from</span> ${esc(frameName)}</div>
+      <div class="ret-val">${esc(ev.result)}</div>
+    </div>`;
+  }
+
+  // Text-only response (no tools)
+  if (!regularTools.length && !ev && s.content) {
+    h += `<div style="padding:8px 12px;color:var(--fg2);font-size:13px;font-style:italic;white-space:pre-wrap">${esc(trunc(s.content, 300))}</div>`;
+  }
+
+  return h;
+}
+
+function renderCtxMsg(msg, isNew) {
+  const content = msg.content || '';
+  const isHeap = msg.role === 'system' && content.startsWith('# HEAP MEMORY');
+  const isReg = msg.role === 'system' && (content.startsWith('# REGISTERS') || content.startsWith('# FRAME REGISTERS'));
+  let cls = isNew ? 'ctx-msg new' : 'ctx-msg old';
+  if (isHeap) cls += ' heap-msg';
+  if (isReg) cls += ' reg-msg';
+  const rc = `r-${msg.role}`;
+  const len = msg.content_len > 1500 ? `${fmtN(msg.content_len)} truncated` : fmtN(msg.content_len);
+  const tc = msg.tool_calls ? `<span class="ctx-tools-inline">&rarr; ${msg.tool_calls.join(', ')}</span>` : '';
+  const heapLabel = isHeap ? '<span class="heap-label">HEAP MEMORY</span>' : '';
+  const regLabel = isReg ? '<span class="reg-label-badge">REGISTERS</span>' : '';
+  const isLong = content.length > 150;
+  return `<div class="${cls}">
+    <div class="ctx-role ${rc}">${msg.role} ${heapLabel}${regLabel} ${tc} <span class="ctx-len">${len}</span></div>
+    <div class="ctx-body${isLong?'':' expanded'}">${esc(content)}</div>
+  </div>`;
+}
+
+function fmtToolArgs(t) {
+  if (!t.args) return '';
+  const a = t.args;
+  if (a.path) return `("${a.path}")`;
+  if (a.command) return `("${trunc(a.command, 40)}")`;
+  return '';
+}
+
+// ── Registers tab renderer ──────────────────────────────
+function renderRegsTab(s, idx) {
+  let h = '';
+  const regs = s.registers || {};
+  const regBytes = s.reg_bytes_total || 0;
+
+  const SCHEMA = {
+    R0: {label:'PARENT_INTENT', max:300}, R1: {label:'RETURN_SPEC', max:400},
+    R2: {label:'ACTIVE_PTRS', max:300}, R3: {label:'BUDGET_HINT', max:200},
+  };
+
+  // Detect if registers changed from previous step (frame boundary)
+  let changedFromPrev = false;
+  if (idx > 0) {
+    const prevRegs = DATA.steps[idx-1].registers || {};
+    changedFromPrev = Object.keys(SCHEMA).some(k => (regs[k]||'') !== (prevRegs[k]||''));
+  }
+
+  const title = changedFromPrev ? 'Frame Registers (new frame)' : 'Frame Registers';
+  h += `<div class="dsec"><h3>${title} — ${regBytes} chars</h3>`;
+  h += `<table class="reg-table"><tr><th>Reg</th><th>Label</th><th>Value</th><th>Chars</th></tr>`;
+
+  for (const [key, schema] of Object.entries(SCHEMA)) {
+    const val = regs[key] || '';
+    const valCls = val ? 'reg-val' : 'reg-val empty';
+    const display = val || '(empty)';
+    h += `<tr>
+      <td class="reg-key">${key}</td>
+      <td class="reg-label">${schema.label}</td>
+      <td class="${valCls}">${esc(display)}</td>
+      <td class="reg-chars">${val.length}/${schema.max}</td>
+    </tr>`;
+  }
+  h += `</table></div>`;
+
+  return h;
+}
+
+// ── Heap tab renderer ─────────────────────────────────
+function renderHeapTab(s, idx) {
+  let h = '';
+  const heap = s.heap || {};
+  const heapEvents = s.heap_events || [];
+  const heapFreed = s.heap_freed || [];
+  const totalSteps = DATA.steps.length;
+  const lastStep = DATA.steps[totalSteps - 1]?.step || totalSteps;
+
+  // Collect all chunk lifecycles from full trace
+  const lifecycles = {};
+  DATA.steps.forEach(st => {
+    for (const ev of (st.heap_events || [])) {
+      if (ev.type === 'alloc') {
+        lifecycles[ev.name] = { name: ev.name, alloc: ev.step, free: null, size: ev.size, writes: [] };
+      } else if (ev.type === 'write' && lifecycles[ev.name]) {
+        lifecycles[ev.name].writes.push(ev.step);
+        lifecycles[ev.name].size = ev.size;
+      } else if (ev.type === 'free' && lifecycles[ev.name]) {
+        lifecycles[ev.name].free = ev.step;
+      }
+    }
+  });
+
+  const chunks = Object.values(lifecycles);
+
+  // Timeline visualization
+  if (chunks.length > 0) {
+    h += `<div class="dsec"><h3>Heap Timeline</h3>`;
+    h += `<div class="heap-timeline-container">`;
+
+    chunks.forEach(c => {
+      const allocPct = (c.alloc / lastStep) * 100;
+      const endStep = c.free != null ? c.free : lastStep;
+      const widthPct = Math.max(1, ((endStep - c.alloc) / lastStep) * 100);
+      const isActive = c.free == null;
+      const cls = isActive ? 'active' : 'freed';
+      const title = `${c.name}: step ${c.alloc}→${c.free != null ? c.free : 'live'} (${c.size}c)`;
+
+      // Write ticks
+      let ticks = '';
+      c.writes.forEach(ws => {
+        const tickPct = ((ws - c.alloc) / (endStep - c.alloc)) * 100;
+        if (tickPct >= 0 && tickPct <= 100) {
+          ticks += `<span class="write-tick" style="left:${tickPct}%" title="write @ step ${ws}"></span>`;
+        }
+      });
+
+      h += `<div class="heap-timeline-row">
+        <span class="heap-timeline-label" title="${esc(c.name)}">${esc(c.name)}</span>
+        <div class="heap-timeline-bar-area">
+          <div class="heap-bar ${cls}" style="left:${allocPct}%;width:${widthPct}%" title="${esc(title)}">
+            ${ticks}
+          </div>
+        </div>
+      </div>`;
+    });
+
+    // Step indicator
+    const curPct = (s.step / lastStep) * 100;
+    h += `<div class="heap-timeline-row">
+      <span class="heap-timeline-label" style="color:var(--fg3)">current step</span>
+      <div class="heap-timeline-bar-area" style="height:2px">
+        <div style="position:absolute;left:${curPct}%;top:-4px;width:2px;height:10px;background:var(--blue);border-radius:1px" title="step ${s.step}"></div>
+      </div>
+    </div>`;
+
+    h += `</div></div>`;
+  }
+
+  // Active chunks table (at current step)
+  const activeNames = Object.keys(heap);
+  if (activeNames.length > 0) {
+    h += `<div class="dsec"><h3>Active Chunks (${activeNames.length})</h3>`;
+    h += `<table class="heap-table"><tr><th>Name</th><th>Description</th><th>Size</th><th>Alloc</th><th>Written</th></tr>`;
+    activeNames.forEach(name => {
+      const c = heap[name];
+      h += `<tr>
+        <td class="hn">${esc(name)}</td>
+        <td class="hd">${esc(c.description || '')}</td>
+        <td class="hs">${fmtN(c.size)}c</td>
+        <td class="hs">s${c.allocated_at}</td>
+        <td class="hs">s${c.last_written_at}</td>
+      </tr>`;
+    });
+    h += `</table></div>`;
+  } else {
+    h += `<div class="dsec"><h3>Active Chunks</h3><div style="color:var(--fg3);padding:10px">No active heap chunks at this step</div></div>`;
+  }
+
+  // Events this step
+  if (heapEvents.length > 0) {
+    h += `<div class="dsec"><h3>Events This Step</h3>`;
+    heapEvents.forEach(ev => {
+      const color = ev.type === 'alloc' ? 'var(--green)' : ev.type === 'write' ? 'var(--yellow)' : 'var(--red)';
+      const sym = ev.type === 'alloc' ? '+' : ev.type === 'write' ? '~' : '-';
+      h += `<div style="padding:4px 0;font-size:13px"><span style="color:${color};font-weight:700">${sym} ${ev.type}</span> <span style="color:var(--purple);font-weight:600">${esc(ev.name)}</span> <span style="color:var(--fg3)">${fmtN(ev.size)}c</span></div>`;
+    });
+    h += `</div>`;
+  }
+
+  // Graveyard (freed chunks)
+  if (heapFreed.length > 0) {
+    h += `<div class="dsec"><h3>Graveyard (${heapFreed.length} freed)</h3>`;
+    h += `<table class="heap-table"><tr><th>Name</th><th>Description</th><th>Size</th><th>Lifespan</th></tr>`;
+    heapFreed.forEach(c => {
+      h += `<tr style="opacity:0.6">
+        <td class="hn">${esc(c.name)}</td>
+        <td class="hd">${esc(c.description || '')}</td>
+        <td class="hs">${fmtN(c.size)}c</td>
+        <td class="hs">s${c.allocated_at}→s${c.freed_at}</td>
+      </tr>`;
+    });
+    h += `</table></div>`;
+  }
+
+  return h;
+}
+
+// ── Search tab renderer ──────────────────────────────
+function renderSearchTab(s, idx) {
+  let h = '';
+  const ss = DATA.meta.search_stats;
+  if (!ss) return '<div style="color:var(--fg3);padding:20px">No search stats</div>';
+
+  // Overall search stats
+  h += `<div class="dsec"><h3>Search Stats (Overall)</h3><div class="dkv">
+    <span class="k">Total searches</span><span class="v" style="font-weight:700">${ss.calls}</span>
+    <span class="k">Result tokens</span><span class="v">${fmtN(ss.result_tokens_approx)}</span>
+    <span class="k">Passages seen</span><span class="v">${ss.unique_passages_seen} / ${ss.corpus_size}</span>
+    <span class="k">Relevant seen</span><span class="v" style="color:var(--green);font-weight:700">${ss.relevant_passages_seen}</span>
+    <span class="k">Noise ratio</span><span class="v" style="color:${ss.noise_ratio > 0.5 ? 'var(--red)' : 'var(--green)'};font-weight:700">${Math.round(ss.noise_ratio * 100)}%</span>
+  </div></div>`;
+
+  // Search calls at this step
+  const searchTools = (s.tools || []).filter(t => t.name === 'search_docs');
+  if (searchTools.length > 0) {
+    h += `<div class="dsec"><h3>Searches This Step (${searchTools.length})</h3>`;
+    searchTools.forEach(t => {
+      const query = t.args?.query || '?';
+      h += `<div class="tool-resp" style="margin-bottom:8px">
+        <span class="tr-name">search_docs</span><span class="tr-args">("${esc(query)}")</span>
+        <div class="tr-result" style="max-height:120px">${esc(t.result)}</div>
+      </div>`;
+    });
+    h += '</div>';
+  } else {
+    h += '<div style="color:var(--fg3);padding:10px 0">No search calls at this step</div>';
+  }
+
+  return h;
+}
+
+// ── Keyboard ─────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (!DATA) return;
+  const n = DATA.steps.length;
+  if (e.key==='ArrowDown'||e.key==='j') { e.preventDefault(); sel(SEL===null?0:Math.min(SEL+1,n-1)); }
+  if (e.key==='ArrowUp'||e.key==='k') { e.preventDefault(); sel(SEL===null?0:Math.max(SEL-1,0)); }
+});
+
+function mk(tag, cls, parent) { const e = document.createElement(tag); e.className = cls; parent.appendChild(e); return e; }
+function fmtN(n) { if(n==null)return'-'; if(n>=1e6)return(n/1e6).toFixed(1)+'M'; if(n>=1e3)return(n/1e3).toFixed(1)+'K'; return String(n); }
+function fmtMs(ms) { if(ms==null)return'-'; if(ms>=1000)return(ms/1000).toFixed(1)+'s'; return ms+'ms'; }
+function trunc(s, n) { return s&&s.length>n ? s.slice(0,n)+'...' : (s||''); }
+function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+
+(function() {
+  const f = new URLSearchParams(window.location.search).get('file');
+  if (f) {
+    fetch(f).then(r=>r.json()).then(d => { DATA=d; render(); sel(0); }).catch(e => console.error('Auto-load:', e));
+    return;
+  }
+  // Try to load trace index from server
+  fetch('/traces').then(r => r.json()).then(traces => {
+    if (!traces.length) return;
+    // Sort by timestamp descending (newest first)
+    traces.sort((a, b) => {
+      const ta = a.timestamp || a.file || '';
+      const tb = b.timestamp || b.file || '';
+      return tb.localeCompare(ta);
+    });
+    const idx = document.getElementById('trace-index');
+    idx.style.display = 'block';
+    let h = '<div style="text-align:left; font-size: 13px;">';
+    h += '<div style="color:var(--fg2); font-size:16px; font-weight:700; margin-bottom:12px;">Traces on disk</div>';
+    traces.forEach(t => {
+      const nameLabel = t.name || t.file || 'unnamed';
+      // Format timestamp
+      let when = '';
+      if (t.timestamp) {
+        const d = new Date(t.timestamp);
+        if (!isNaN(d)) when = d.toLocaleString('sv-SE', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      }
+      if (!when && t.file) {
+        const m = t.file.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+        if (m) when = `${m[2]}-${m[3]} ${m[4]}:${m[5]}`;
+      }
+      // Build compact badge line
+      const badges = [];
+      badges.push(`<span style="color:var(--green);font-weight:700">${t.steps} steps</span>`);
+      if (t.dynamic_tokens != null) badges.push(`<span style="color:var(--blue);font-weight:600">${fmtN(t.dynamic_tokens)} dyn</span>`);
+      if (t.search_stats?.calls) badges.push(`<span style="color:var(--cyan)">${t.search_stats.calls} searches</span>`);
+      if (t.probe_count) badges.push(`<span style="color:var(--orange)">${t.probe_count} probes</span>`);
+      badges.push(`<span style="color:var(--fg3)">${t.elapsed_s}s</span>`);
+
+      h += `<div style="padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;" `
+         + `onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''" `
+         + `onclick="location.search='?file=/traces/${encodeURIComponent(t.file)}'">`;
+      h += `<div style="display:flex;align-items:baseline;gap:10px;">`;
+      h += `<span style="color:var(--fg3);font-size:11px;min-width:90px;">${esc(when)}</span>`;
+      h += `<span style="color:var(--blue);font-weight:700;font-size:14px;">${esc(nameLabel)}</span>`;
+      h += `<span style="color:var(--fg3);font-size:12px;margin-left:auto;">${t.model || ''}</span>`;
+      h += `</div>`;
+      h += `<div style="display:flex;gap:12px;margin-top:4px;font-size:12px;">${badges.join('<span style="color:var(--bg3)">|</span>')}</div>`;
+      h += `</div>`;
+    });
+    h += '</div>';
+    idx.innerHTML = h;
+  }).catch(() => {}); // silently ignore if not served
+})();
+</script>
+</body>
+</html>

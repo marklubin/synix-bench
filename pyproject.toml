@@ -1,0 +1,49 @@
+[project]
+name = "synix-bench"
+version = "0.1.0"
+description = "Unified benchmark platform for agent memory and context management strategies"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "openai>=1.0",
+    "tiktoken>=0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.1",
+]
+scoring = ["numpy>=1.24", "matplotlib>=3.7"]
+swebench = ["swebench>=2.0", "docker>=6.0"]
+datagen = ["pyyaml>=6.0"]
+adapters = [
+    "mem0ai",
+    "letta-client",
+]
+all = ["synix-bench[dev,scoring,swebench,datagen,adapters]"]
+
+[project.scripts]
+synix-bench = "synix.cli.main:cli"
+
+[project.entry-points."synix.adapters"]
+# External adapter plugins register here
+
+[project.entry-points."synix.metrics"]
+# External metric plugins register here
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/synix"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

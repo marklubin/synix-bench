@@ -1,0 +1,21 @@
+{
+  "name": "order-sys-first",
+  "description": "sys-first ordering control — no masking, small registers (= baseline, explicit control)",
+  "prompt_file": "stack-heap-v7.txt",
+  "sections": ["system_prompt", "registers", "heap_index", "objective", "conversation"],
+  "masking": {
+    "enabled": false,
+    "window": 10,
+    "placeholder": "[Output omitted]"
+  },
+  "registers": {
+    "R0": {"label": "INTENT", "max_chars": 200},
+    "R1": {"label": "RETURN", "max_chars": 200},
+    "R3": {"label": "BUDGET", "max_chars": 100}
+  },
+  "push_limits": {
+    "objective": 200,
+    "context": 500,
+    "return_spec": 200
+  }
+}

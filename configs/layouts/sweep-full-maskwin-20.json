@@ -1,0 +1,36 @@
+{
+  "name": "sweep-full-maskwin-20",
+  "description": "conv-first layout + masking (window=10) + 10x registers",
+  "prompt_file": "stack-heap-v7.txt",
+  "sections": [
+    "objective",
+    "conversation",
+    "registers",
+    "heap_index",
+    "system_prompt"
+  ],
+  "masking": {
+    "enabled": true,
+    "window": 20,
+    "placeholder": "[Output omitted]"
+  },
+  "registers": {
+    "R0": {
+      "label": "INTENT",
+      "max_chars": 2000
+    },
+    "R1": {
+      "label": "RETURN",
+      "max_chars": 2000
+    },
+    "R3": {
+      "label": "BUDGET",
+      "max_chars": 1000
+    }
+  },
+  "push_limits": {
+    "objective": 2000,
+    "context": 5000,
+    "return_spec": 2000
+  }
+}
