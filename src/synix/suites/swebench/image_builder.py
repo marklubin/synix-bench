@@ -31,23 +31,29 @@ class ContainerExecutor:
         self.cid = container_id
         self.workdir = workdir
 
+    def _resolve_path(self, path: str) -> str:
+        """Resolve a path relative to workdir, or use as-is if absolute."""
+        if path.startswith("/"):
+            return path
+        return f"{self.workdir}/{path}"
+
     def __call__(self, name: str, args: dict) -> str:
         """Dispatch a tool call to the container."""
         if name == "read_file":
             path = args.get("path", "")
-            return self._exec(f"cat {self.workdir}/{path}")
+            return self._exec(f"cat {self._resolve_path(path)}")
 
         elif name == "write_file":
             path = args.get("path", "")
             content = args.get("content", "")
-            full_path = f"{self.workdir}/{path}"
+            full_path = self._resolve_path(path)
             self._exec(f"mkdir -p $(dirname {full_path})")
             self._exec(f"tee {full_path} > /dev/null", input=content)
             return f"OK -- wrote {len(content)} chars to {path}"
 
         elif name == "list_files":
             path = args.get("path", ".")
-            return self._exec(f"ls {self.workdir}/{path}")
+            return self._exec(f"ls {self._resolve_path(path)}")
 
         elif name == "run_command":
             cmd = args.get("command", "")
