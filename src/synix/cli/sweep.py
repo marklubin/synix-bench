@@ -11,6 +11,20 @@ from rich.console import Console
 console = Console()
 
 
+def _run_one(config) -> dict:
+    """Run a single config — must be module-level for ProcessPoolExecutor pickling."""
+    from synix.cli.engine import RunEngine
+
+    engine = RunEngine(config)
+    result = engine.run()
+    return {
+        "suite": result.suite,
+        "strategy": result.strategy,
+        "success_rate": result.success_rate,
+        "tasks": len(result.tasks),
+    }
+
+
 @click.command()
 @click.option("--config", "config_path", required=True, type=click.Path(exists=True), help="Sweep config JSON")
 @click.option("--out", "output_dir", default="results", help="Output directory")
@@ -82,20 +96,10 @@ def sweep(
 
     console.print(f"Sweep: {len(configs)} configs, {workers} workers")
 
-    def run_one(config: RunConfig) -> dict:
-        engine = RunEngine(config)
-        result = engine.run()
-        return {
-            "suite": result.suite,
-            "strategy": result.strategy,
-            "success_rate": result.success_rate,
-            "tasks": len(result.tasks),
-        }
-
     results = []
     try:
         with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(run_one, c): i for i, c in enumerate(configs)}
+            futures = {pool.submit(_run_one, c): i for i, c in enumerate(configs)}
             for future in concurrent.futures.as_completed(futures):
                 idx = futures[future]
                 try:
