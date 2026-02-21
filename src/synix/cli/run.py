@@ -31,8 +31,11 @@ console = Console()
 @click.option("--no-think-prefill", is_flag=True, help="Suppress Qwen3 think mode")
 @click.option("--layout", default=None, type=click.Path(exists=True), help="Layout config (for stack+heap)")
 @click.option("--provider", default=None, help="LLM provider (mock, openai)")
+@click.option("--infra", "infra_provider", default="local", type=click.Choice(["local", "modal"]), help="Infrastructure provider")
+@click.option("--skip-deploy", is_flag=True, help="Skip Modal deploy, just health-check existing endpoint")
 @click.option("--parallel-questions", default=None, type=int, help="Concurrent questions (lens)")
 @click.option("--cache-dir", default=None, type=click.Path(), help="Adapter cache dir (lens)")
+@click.option("--prebuild-only", is_flag=True, help="Build SWE-bench container images and exit")
 @click.option("-v", "--verbose", count=True)
 def run(
     suite: str,
@@ -54,6 +57,9 @@ def run(
     no_think_prefill: bool,
     layout: str | None,
     provider: str | None,
+    infra_provider: str,
+    skip_deploy: bool,
+    prebuild_only: bool,
     parallel_questions: int | None,
     cache_dir: str | None,
     verbose: int,
@@ -112,6 +118,7 @@ def run(
                 workers=workers,
                 layout_file=layout,
                 no_think_prefill=no_think_prefill,
+                prebuild_only=prebuild_only,
             ),
             sample=sample,
             trials=trials,
@@ -124,10 +131,47 @@ def run(
     if cache_dir is not None:
         config.cache_dir = cache_dir
 
+    # Modal infrastructure
+    config.infra.provider = infra_provider
+    if skip_deploy:
+        config.infra.modal_skip_deploy = True
+
     config.llm = config.llm.resolve_env()
 
-    engine = RunEngine(config)
-    result = engine.run()
+    modal_prov = None
+    if config.infra.provider == "modal":
+        from synix.infra import create_provider
+
+        modal_prov = create_provider(config.infra)
+        if modal_prov is None:
+            raise click.ClickException("Failed to create Modal provider")
+
+        if not config.infra.modal_skip_deploy:
+            console.print("[bold]Deploying Modal inference...[/bold]")
+            endpoint = modal_prov.deploy(timeout=config.infra.modal_timeout)
+        else:
+            endpoint = modal_prov.get_endpoint()
+            console.print(f"[bold]Using existing Modal endpoint:[/bold] {endpoint}")
+
+        # Override LLM config to point at Modal endpoint
+        config.llm = LLMConfig(
+            provider=config.llm.provider if config.llm.provider != "mock" else "openai",
+            model=config.llm.model,
+            api_base=endpoint,
+            api_key=modal_prov.api_token or config.llm.api_key,
+            seed=config.llm.seed,
+            temperature=config.llm.temperature,
+            max_tokens=config.llm.max_tokens,
+            extra_body=config.llm.extra_body,
+        )
+
+    try:
+        engine = RunEngine(config)
+        result = engine.run()
+    finally:
+        if modal_prov and not config.infra.modal_skip_deploy:
+            console.print("[dim]Tearing down Modal apps...[/dim]")
+            modal_prov.teardown()
 
     console.print(f"\n[bold green]Run complete![/bold green]")
     console.print(f"Suite: {result.suite}, Strategy: {result.strategy}")

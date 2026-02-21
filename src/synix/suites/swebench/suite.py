@@ -79,7 +79,12 @@ class SWEBenchSuite(BenchmarkSuite):
 
     def load_tasks(self, config: RunConfig) -> list[dict]:
         """Load SWE-bench instances based on config."""
-        instance_ids = [config.instance_id] if config.instance_id else None
+        if config.instance_ids:
+            instance_ids = config.instance_ids
+        elif config.instance_id:
+            instance_ids = [config.instance_id]
+        else:
+            instance_ids = None
         return load_dataset_instances(
             instance_ids=instance_ids,
             sample=config.sample,
@@ -110,6 +115,14 @@ class SWEBenchSuite(BenchmarkSuite):
                 base_url=config.llm.api_base,
             )
 
+            # Load layout config if specified (for stack_heap strategy)
+            layout = None
+            if config.swebench.layout_file:
+                import json as _json
+                from pathlib import Path as _Path
+
+                layout = _json.loads(_Path(config.swebench.layout_file).read_text())
+
             # Run the strategy
             run_result = strategy.run(
                 client=client,
@@ -117,6 +130,8 @@ class SWEBenchSuite(BenchmarkSuite):
                 task=task_desc,
                 executor=executor,
                 max_steps=config.swebench.max_steps,
+                layout=layout,
+                no_think_prefill=config.swebench.no_think_prefill,
             )
 
             # Extract patch

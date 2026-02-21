@@ -1,0 +1,83 @@
+{
+  "description": "Pilot sweep: 10 strategies x 6 instances",
+  "instance_ids": [
+    "pylint-dev__pylint-7080",
+    "django__django-11734",
+    "astropy__astropy-14508",
+    "django__django-14034",
+    "django__django-13741",
+    "pytest-dev__pytest-7432"
+  ],
+  "configs": [
+    {
+      "suite": "swebench",
+      "strategy": "naive",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "window",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "truncation",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "summary",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "masking",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "rag",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "incremental_summary",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "structured_summary",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "hierarchical",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 30, "timeout": 1800}
+    },
+    {
+      "suite": "swebench",
+      "strategy": "stack_heap",
+      "instance_ids": ["pylint-dev__pylint-7080", "django__django-11734", "astropy__astropy-14508", "django__django-14034", "django__django-13741", "pytest-dev__pytest-7432"],
+      "llm": {"provider": "openai", "model": "Qwen/Qwen3-32B-AWQ", "temperature": 0.0, "max_tokens": 4096},
+      "swebench": {"max_steps": 50, "timeout": 1800, "layout_file": "configs/layouts/full.json"}
+    }
+  ]
+}

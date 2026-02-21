@@ -31,6 +31,17 @@ class RunEngine:
         # Setup (e.g., prebuild images)
         suite.setup(self.config)
 
+        # Prebuild-only: exit after building images
+        if getattr(self.config.swebench, "prebuild_only", False):
+            log.info("Prebuild-only mode — skipping task execution")
+            return SuiteResult(
+                suite=self.config.suite,
+                strategy=self.config.strategy,
+                model=self.config.llm.model,
+                tasks=[],
+                config=self.config.to_dict(),
+            )
+
         try:
             # Load tasks
             tasks = suite.load_tasks(self.config)

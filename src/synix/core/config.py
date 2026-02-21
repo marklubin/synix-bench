@@ -149,6 +149,11 @@ class InfraConfig:
     container_cmd: str = "podman"  # "podman" or "docker"
     docker_host: str | None = None  # e.g. "unix:///run/user/1000/podman/podman.sock"
     ghcr_prefix: str = "ghcr.io/marklubin/swebench"
+    # Modal fields
+    modal_skip_deploy: bool = False  # skip deploy, just health-check
+    modal_timeout: int = 300  # health check timeout seconds
+    modal_vllm_endpoint: str | None = None  # override default endpoint
+    modal_api_token_env: str = "SYNIX_API_TOKEN"
 
     @classmethod
     def from_dict(cls, d: dict) -> InfraConfig:
@@ -184,6 +189,7 @@ class RunConfig:
     sample: int | None = None  # number of instances to sample
     trials: int = 1
     instance_id: str | None = None  # specific instance
+    instance_ids: list[str] | None = None  # multiple specific instances
 
     @classmethod
     def from_dict(cls, d: dict) -> RunConfig:
@@ -212,6 +218,7 @@ class RunConfig:
             sample=d.get("sample"),
             trials=d.get("trials", 1),
             instance_id=d.get("instance_id"),
+            instance_ids=d.get("instance_ids"),
         )
 
     def to_dict(self) -> dict:
@@ -243,6 +250,15 @@ class RunConfig:
             }
             if self.swebench.layout_file:
                 d["swebench"]["layout_file"] = self.swebench.layout_file
+        if self.infra.provider != "local":
+            infra_d: dict = {"provider": self.infra.provider}
+            if self.infra.modal_skip_deploy:
+                infra_d["modal_skip_deploy"] = True
+            if self.infra.modal_vllm_endpoint:
+                infra_d["modal_vllm_endpoint"] = self.infra.modal_vllm_endpoint
+            if self.infra.modal_api_token_env != "SYNIX_API_TOKEN":
+                infra_d["modal_api_token_env"] = self.infra.modal_api_token_env
+            d["infra"] = infra_d
         if self.sample:
             d["sample"] = self.sample
         if self.trials > 1:

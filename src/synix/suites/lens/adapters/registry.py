@@ -107,3 +107,7 @@ def _ensure_builtins() -> None:
         import synix.suites.lens.adapters.compaction  # noqa: F401
     except ImportError:
         pass  # openai not installed
+    try:
+        import synix.suites.lens.adapters.triad  # noqa: F401
+    except ImportError:
+        pass  # openai not installed

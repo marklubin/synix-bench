@@ -2537,6 +2537,7 @@ all = [
     { name = "letta-client" },
     { name = "matplotlib" },
     { name = "mem0ai" },
+    { name = "modal" },
     { name = "numpy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -2551,6 +2552,9 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
+]
+modal = [
+    { name = "modal" },
 ]
 scoring = [
     { name = "matplotlib" },
@@ -2568,6 +2572,7 @@ requires-dist = [
     { name = "letta-client", marker = "extra == 'adapters'" },
     { name = "matplotlib", marker = "extra == 'scoring'", specifier = ">=3.7" },
     { name = "mem0ai", marker = "extra == 'adapters'" },
+    { name = "modal", marker = "extra == 'modal'", specifier = ">=0.73" },
     { name = "numpy", marker = "extra == 'scoring'", specifier = ">=1.24" },
     { name = "openai", specifier = ">=1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
@@ -2576,10 +2581,10 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
     { name = "swebench", marker = "extra == 'swebench'", specifier = ">=2.0" },
-    { name = "synix-bench", extras = ["dev", "scoring", "swebench", "datagen", "adapters"], marker = "extra == 'all'" },
+    { name = "synix-bench", extras = ["dev", "scoring", "swebench", "datagen", "adapters", "modal"], marker = "extra == 'all'" },
     { name = "tiktoken", specifier = ">=0.5" },
 ]
-provides-extras = ["dev", "scoring", "swebench", "datagen", "adapters", "all"]
+provides-extras = ["dev", "scoring", "swebench", "modal", "datagen", "adapters", "all"]
 
 [[package]]
 name = "tenacity"

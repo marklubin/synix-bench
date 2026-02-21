@@ -18,12 +18,13 @@ dev = [
 ]
 scoring = ["numpy>=1.24", "matplotlib>=3.7"]
 swebench = ["swebench>=2.0", "docker>=6.0"]
+modal = ["modal>=0.73"]
 datagen = ["pyyaml>=6.0"]
 adapters = [
     "mem0ai",
     "letta-client",
 ]
-all = ["synix-bench[dev,scoring,swebench,datagen,adapters]"]
+all = ["synix-bench[dev,scoring,swebench,datagen,adapters,modal]"]
 
 [project.scripts]
 synix-bench = "synix.cli.main:cli"
